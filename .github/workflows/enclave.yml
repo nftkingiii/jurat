@@ -1,0 +1,57 @@
+name: enclave
+
+on:
+  push:
+    paths: ['enclave/**', 'spike/**', '.github/workflows/enclave.yml']
+  workflow_dispatch:
+
+jobs:
+  build-and-run:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-wasip2
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - uses: bytecodealliance/actions/wasmtime/setup@v1
+        with:
+          version: '50.0.0'
+
+      - name: Unit tests
+        working-directory: enclave
+        run: cargo test --locked
+
+      - name: Build the WASI P2 module
+        working-directory: enclave
+        run: |
+          cargo build --locked --release --target wasm32-wasip2
+          sha256sum target/wasm32-wasip2/release/jurat-enclave.wasm | tee ../wasm.sha256
+
+      # The module runs outside OutLayer here, against live 1Click mainnet,
+      # with throwaway keys that hold nothing.
+      - name: Run against 1Click
+        run: |
+          WASM=enclave/target/wasm32-wasip2/release/jurat-enclave.wasm
+          run() { node spike/local/make-request.mjs "$@" | wasmtime run -S http "$WASM"; }
+
+          ok=$(run nep141:wrap.near 0);       echo "threshold 0: $ok"
+          low=$(run nep141:wrap.near 1);      echo "threshold 1: $low"
+          stale=$(run nep141:wrap.near 0 --stale); echo "stale intent: $stale"
+
+          test "$(jq -r .result <<<"$ok")" = confirmed
+          test "$(jq -r .result <<<"$low")" = not_confirmed
+          test "$(jq -r .result <<<"$stale")" = refused
+          test "$(jq -r .auth_status <<<"$stale")" = 401
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: jurat-enclave-wasm
+          path: |
+            enclave/target/wasm32-wasip2/release/jurat-enclave.wasm
+            wasm.sha256
