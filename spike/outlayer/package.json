@@ -1,0 +1,9 @@
+{
+  "name": "jurat-outlayer-spike",
+  "private": true,
+  "type": "module",
+  "description": "Run the Jurat enclave inside OutLayer from a NEAR testnet account",
+  "dependencies": {
+    "near-api-js": "7.3.1"
+  }
+}
