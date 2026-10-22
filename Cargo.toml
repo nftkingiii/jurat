@@ -1,6 +1,9 @@
 [workspace]
 members = ["enclave"]
-resolver = "2"
+resolver = "3"
+
+# OutLayer's default compiler image is rust 1.85; resolver 3 keeps the lock
+# file on dependency versions that build there.
 
 # OutLayer compiles from the repository root, so the release profile lives here.
 [profile.release]
