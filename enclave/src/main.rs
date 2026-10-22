@@ -116,9 +116,9 @@ fn check(req: Request) -> Statement {
         st.reason = Some("1Click refused the signed intent".into());
         return st;
     }
-    let session: Session = match auth.json() {
-        Ok(s) => s,
-        Err(_) => {
+    let session: Session = match auth.body().ok().and_then(|b| serde_json::from_slice(&b).ok()) {
+        Some(s) => s,
+        None => {
             st.reason = Some("unexpected authenticate response".into());
             return st;
         }
@@ -140,9 +140,9 @@ fn check(req: Request) -> Statement {
         st.reason = Some("1Click refused the balance read".into());
         return st;
     }
-    let balances: Balances = match bal.json() {
-        Ok(b) => b,
-        Err(_) => {
+    let balances: Balances = match bal.body().ok().and_then(|b| serde_json::from_slice(&b).ok()) {
+        Some(b) => b,
+        None => {
             st.reason = Some("unexpected balances response".into());
             return st;
         }
