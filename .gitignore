@@ -1,0 +1,21 @@
+# Internal hack files, kept local
+PROJECT_STATE.md
+HACK_EVENT_GATE.json
+SOURCES.md
+notes/
+evidence/private/
+submission*.json
+
+# Secrets
+.env
+.env.*
+!.env.example
+*.key
+*-key.json
+
+# Build output
+node_modules/
+dist/
+target/
+*.wasm
+!vendor/**/*.wasm
