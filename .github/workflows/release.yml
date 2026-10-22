@@ -1,0 +1,40 @@
+name: release
+
+# Builds the enclave with rust 1.85 (the toolchain in OutLayer's default
+# compiler image) from a tagged commit and attaches the .wasm and its sha256 to
+# a GitHub pre-release. OutLayer runs it from that URL as a WasmUrl source.
+on:
+  push:
+    tags: ['enclave-v*']
+
+permissions:
+  contents: write
+
+jobs:
+  wasm:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.85.0
+          targets: wasm32-wasip2
+
+      - name: Build
+        env:
+          # Keep build paths out of the binary so anyone can rebuild the same bytes.
+          RUSTFLAGS: --remap-path-prefix=${{ github.workspace }}=/jurat --remap-path-prefix=/home/runner/.cargo=/cargo
+        run: |
+          cargo test --locked
+          cargo build --locked --release --target wasm32-wasip2
+          cp target/wasm32-wasip2/release/jurat-enclave.wasm jurat-enclave.wasm
+          sha256sum jurat-enclave.wasm | tee jurat-enclave.wasm.sha256
+
+      - name: Publish pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" jurat-enclave.wasm jurat-enclave.wasm.sha256 \
+            --prerelease --title "$GITHUB_REF_NAME" \
+            --notes "Enclave module built by CI with rust 1.85.0 from ${GITHUB_SHA}. sha256: $(cut -d' ' -f1 jurat-enclave.wasm.sha256)"

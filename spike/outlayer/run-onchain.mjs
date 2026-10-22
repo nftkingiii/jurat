@@ -1,18 +1,20 @@
 // Runs the Jurat enclave inside OutLayer through outlayer.testnet.
 //
 // The request carries an empty intent signed by a throwaway key, so the enclave
-// logs in to live 1Click and reads an empty confidential balance. OutLayer
-// compiles the module itself from this repository at the given commit.
+// logs in to live 1Click and reads an empty confidential balance.
+//
+// OutLayer stopped building from GitHub (testnet, 2026-10-22), so the module
+// comes from a release asset: a WasmUrl source with the file's sha256, which
+// the worker checks before it runs anything.
 //
 // Usage:
-//   node spike/outlayer/run-onchain.mjs <account.testnet> <commit> --compile-only
-//   node spike/outlayer/run-onchain.mjs <account.testnet> <commit> [threshold] [--stale]
+//   node spike/outlayer/run-onchain.mjs <account.testnet> <release tag> [threshold] [--stale]
 // The key comes from ~/.jurat/testnet/<account>.json (written by store-key.mjs).
 
 import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { generateKeyPairSync } from 'node:crypto';
+import { generateKeyPairSync, createHash } from 'node:crypto';
 import { Account, parseNearAmount, teraToGas } from 'near-api-js';
 import { currentSalt, signEmptyIntent } from '../local/intent.mjs';
 
@@ -21,12 +23,23 @@ const OUTLAYER = 'outlayer.testnet';
 const REPO = 'https://github.com/nftkingiii/jurat';
 
 const args = process.argv.slice(2).filter((a) => !a.startsWith('--'));
-const compileOnly = process.argv.includes('--compile-only');
 const stale = process.argv.includes('--stale');
-const [accountId, commit, threshold = '0'] = args;
-if (!accountId || !/^[0-9a-f]{40}$/.test(commit ?? '')) {
-  console.error('Usage: run-onchain.mjs <account.testnet> <40-char commit> [threshold] [--compile-only] [--stale]');
+const [accountId, tag, threshold = '0'] = args;
+if (!accountId || !/^enclave-v[0-9A-Za-z.+-]+$/.test(tag ?? '')) {
+  console.error('Usage: run-onchain.mjs <account.testnet> <enclave-v... release tag> [threshold] [--stale]');
   process.exit(2);
+}
+const WASM_URL = `${REPO}/releases/download/${tag}/jurat-enclave.wasm`;
+
+// The pinned hash is the one the release published, re-checked against the file.
+async function releaseHash() {
+  const published = (await (await fetch(`${WASM_URL}.sha256`)).text()).trim().split(/\s+/)[0];
+  const bytes = Buffer.from(await (await fetch(WASM_URL)).arrayBuffer());
+  const actual = createHash('sha256').update(bytes).digest('hex');
+  if (!/^[0-9a-f]{64}$/.test(published) || published !== actual) {
+    throw new Error(`release hash mismatch: published ${published}, file ${actual}`);
+  }
+  return actual;
 }
 
 const { private_key: secret } = JSON.parse(
@@ -53,7 +66,6 @@ async function view(methodName, argsObj) {
 }
 
 async function request() {
-  if (compileOnly) return null;
   const { publicKey, privateKey } = generateKeyPairSync('ed25519');
   const pub = publicKey.export({ format: 'der', type: 'spki' }).subarray(-32);
   const start = new Date(Date.now() - (stale ? 10 * 60_000 : 0));
@@ -72,27 +84,27 @@ async function waitFinal(hash) {
 }
 
 const limits = { max_instructions: 10_000_000_000, max_memory_mb: 128, max_execution_seconds: 60 };
+const hash = await releaseHash();
 const input = await request();
-const cost = await view('estimate_execution_cost', { resource_limits: limits, input_len: input?.length ?? 0 });
+const cost = await view('estimate_execution_cost', { resource_limits: limits, input_len: input.length });
 const deposit = (BigInt(cost) * 3n > BigInt(parseNearAmount('0.02'))) ? BigInt(cost) * 3n : BigInt(parseNearAmount('0.02'));
 
 const callArgs = {
-  source: { GitHub: { repo: REPO, commit, build_target: 'wasm32-wasip2' } },
-  resource_limits: compileOnly ? null : limits,
+  source: { WasmUrl: { url: WASM_URL, hash, build_target: 'wasm32-wasip2' } },
+  resource_limits: limits,
   input_data: input,
   response_format: 'Json',
-  params: compileOnly ? { compile_only: true } : null,
 };
-console.log(`${compileOnly ? 'compile only' : `threshold ${threshold}${stale ? ' (stale intent)' : ''}`} | commit ${commit.slice(0, 7)} | estimated ${cost} yocto, attaching ${deposit} (refund above cost)`);
+console.log(`threshold ${threshold}${stale ? ' (stale intent)' : ''} | ${tag} sha256 ${hash.slice(0, 12)}… | estimated ${cost} yocto, attaching ${deposit} (refund above cost)`);
 
 const sent = await account.callFunctionRaw({
   contractId: OUTLAYER, methodName: 'request_execution', args: callArgs,
   deposit, gas: teraToGas('300'), waitUntil: 'INCLUDED',
 });
-const hash = sent.transaction?.hash ?? sent.transaction_outcome?.id;
-console.log(`tx ${hash}\n   https://testnet.nearblocks.io/txns/${hash}`);
+const txHash = sent.transaction?.hash ?? sent.transaction_outcome?.id;
+console.log(`tx ${txHash}\n   https://testnet.nearblocks.io/txns/${txHash}`);
 
-const outcome = await waitFinal(hash);
+const outcome = await waitFinal(txHash);
 const status = outcome.status;
 if (status.SuccessValue !== undefined) {
   const value = Buffer.from(status.SuccessValue, 'base64').toString();
