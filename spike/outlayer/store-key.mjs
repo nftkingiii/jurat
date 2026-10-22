@@ -6,6 +6,9 @@
 // Nothing is printed except the account and the public key.
 //
 // Run: node spike/outlayer/store-key.mjs
+// Without a terminal (stdin piped), it reads two lines instead: the account id,
+// then the private key. Some Windows SSH clients never deliver Enter to a
+// hidden prompt, so the key can be piped from a masked PowerShell prompt.
 
 import { mkdirSync, writeFileSync, chmodSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -54,9 +57,17 @@ async function viewAccessKey(accountId, publicKey) {
   return res.json();
 }
 
-const accountId = await ask('Testnet account id (e.g. you.testnet): ');
+async function readPiped() {
+  let text = '';
+  for await (const chunk of process.stdin) text += chunk;
+  const [account = '', key = ''] = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  return [account, key];
+}
+
+const [accountId, secret] = process.stdin.isTTY
+  ? [await ask('Testnet account id (e.g. you.testnet): '), await ask('Private key (ed25519:..., not shown): ', { hidden: true })]
+  : await readPiped();
 if (!/^[a-z0-9._-]+$/.test(accountId)) throw new Error('That does not look like a NEAR account id.');
-const secret = await ask('Private key (ed25519:..., not shown): ', { hidden: true });
 
 let keyPair;
 try { keyPair = KeyPair.fromString(secret); } catch { throw new Error('That is not a valid ed25519:... private key.'); }
