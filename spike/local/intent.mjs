@@ -1,5 +1,5 @@
 // Shared helpers: sign an empty intent with an ed25519 key (raw_ed25519).
-import { sign, randomBytes } from 'node:crypto';
+import { sign, randomBytes, createHash } from 'node:crypto';
 
 export const ONECLICK = 'https://1click.chaindefuser.com';
 const RPC = 'https://rpc.mainnet.fastnear.com';
@@ -34,25 +34,27 @@ export async function currentSalt() {
   return Buffer.from(hex, 'hex');
 }
 
-function versionedNonce(salt, deadline, start) {
+// With a Jurat challenge, the 7 random bytes are sha256(challenge)[0..7], so the
+// signature only answers that challenge; the enclave checks this.
+function versionedNonce(salt, deadline, start, challenge) {
   const out = Buffer.alloc(32);
   NONCE_MAGIC.copy(out, 0);
   out[4] = 0;
   salt.copy(out, 5);
   out.writeBigUInt64LE(BigInt(deadline.getTime()) * 1_000_000n, 9);
   out.writeBigUInt64LE(BigInt(start.getTime()) * 1_000_000n, 17);
-  randomBytes(7).copy(out, 25);
+  (challenge ? createHash('sha256').update(challenge).digest() : randomBytes(7)).copy(out, 25, 0, 7);
   return out.toString('base64');
 }
 
 // `pub` is the raw 32-byte public key; `privateKey` a node KeyObject.
-export function signEmptyIntent({ pub, privateKey, salt, start }) {
+export function signEmptyIntent({ pub, privateKey, salt, start, challenge }) {
   const deadline = new Date(start.getTime() + 5 * 60_000);
   const payload = JSON.stringify({
     signer_id: pub.toString('hex'),
     verifying_contract: VERIFIER,
     deadline: deadline.toISOString(),
-    nonce: versionedNonce(salt, deadline, start),
+    nonce: versionedNonce(salt, deadline, start, challenge),
     intents: [],
   });
   const signature = sign(null, Buffer.from(payload, 'utf8'), privateKey);

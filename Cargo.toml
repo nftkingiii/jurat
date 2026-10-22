@@ -1,5 +1,6 @@
 [workspace]
 members = ["enclave"]
+exclude = ["contract"]
 resolver = "3"
 
 # OutLayer's default compiler image is rust 1.85; resolver 3 keeps the lock

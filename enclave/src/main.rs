@@ -1,18 +1,31 @@
-//! Jurat enclave program (spike).
+//! Jurat enclave program.
 //!
 //! Runs inside OutLayer's TEE. Reads one JSON request on stdin:
 //!   { "signedData": <empty intent signed by the holder>,
-//!     "tokenId": "nep141:usdc.near", "threshold": "1000000000" }
+//!     "tokenId": "nep141:usdc.near", "threshold": "1000000000",
+//!     "challenge": "jurat:<contract>:<id>:<nonce>" }
 //! logs in to 1Click with the holder's signed empty intent, reads the
 //! confidential balance, and prints only whether the threshold is met.
 //! The balance amount, the session token and other assets never leave.
+//!
+//! A challenge binds the run to one verifier's request: the signed intent's
+//! nonce must carry sha256(challenge) in its 7 random bytes, so a signature
+//! made for one challenge cannot answer another, and the challenge is echoed
+//! in the output for the calling contract to match.
 
+use base64::{engine::general_purpose::STANDARD, Engine};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 use std::io::{self, Read, Write};
 use wasi_http_client::Client;
 
 const ONECLICK: &str = "https://1click.chaindefuser.com";
+
+/// Versioned intent nonce: magic(4) | version(1) | salt(4) | deadline(8) |
+/// start time(8) | random(7). Jurat puts the challenge digest in `random`.
+const NONCE_LEN: usize = 32;
+const NONCE_RANDOM: std::ops::Range<usize> = 25..32;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -20,6 +33,8 @@ struct Request {
     signed_data: Value,
     token_id: String,
     threshold: String,
+    #[serde(default)]
+    challenge: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -29,6 +44,7 @@ struct Statement {
     signer_id: Option<String>,
     token_id: String,
     threshold: String,
+    challenge: Option<String>,
     auth_status: Option<u16>,
     balances_status: Option<u16>,
     reason: Option<String>,
@@ -52,19 +68,39 @@ struct BalanceEntry {
     available: String,
 }
 
-/// The account the signed empty intent speaks for. NEP-413 keeps the intent in
-/// `payload.message`; the other standards sign the intent string as `payload`.
-fn signer_id(signed: &Value) -> Option<String> {
-    let intent = match &signed["payload"] {
+/// The signed intent as JSON. NEP-413 keeps it in `payload.message`; the
+/// other standards sign the intent string as `payload`.
+fn intent(signed: &Value) -> Option<Value> {
+    let text = match &signed["payload"] {
         Value::String(s) => s.clone(),
         Value::Object(p) => p.get("message")?.as_str()?.to_string(),
         _ => return None,
     };
-    let intent: Value = serde_json::from_str(&intent).ok()?;
+    serde_json::from_str(&text).ok()
+}
+
+/// The account the signed empty intent speaks for.
+fn signer_id(signed: &Value) -> Option<String> {
+    let intent = intent(signed)?;
     if intent["intents"].as_array().map_or(true, |a| !a.is_empty()) {
         return None; // only an empty intent is accepted as an ownership proof
     }
     intent["signer_id"].as_str().map(str::to_string)
+}
+
+/// The intent nonce: `payload.nonce` for NEP-413, inside the intent otherwise.
+fn nonce(signed: &Value) -> Option<Vec<u8>> {
+    let encoded = match &signed["payload"] {
+        Value::Object(p) => p.get("nonce")?.as_str()?.to_string(),
+        _ => intent(signed)?["nonce"].as_str()?.to_string(),
+    };
+    STANDARD.decode(encoded).ok().filter(|n| n.len() == NONCE_LEN)
+}
+
+/// True when the nonce's random bytes are the first 7 bytes of sha256(challenge).
+fn nonce_binds(signed: &Value, challenge: &str) -> bool {
+    let digest = Sha256::digest(challenge.as_bytes());
+    nonce(signed).is_some_and(|n| n[NONCE_RANDOM] == digest[..NONCE_RANDOM.len()])
 }
 
 fn is_digits(s: &str) -> bool {
@@ -84,6 +120,7 @@ fn check(req: Request) -> Statement {
         signer_id: signer_id(&req.signed_data),
         token_id: req.token_id.clone(),
         threshold: req.threshold.clone(),
+        challenge: req.challenge.clone(),
         auth_status: None,
         balances_status: None,
         reason: None,
@@ -95,6 +132,12 @@ fn check(req: Request) -> Statement {
     if !is_digits(&req.threshold) {
         st.reason = Some("threshold must be an integer in the token's smallest unit".into());
         return st;
+    }
+    if let Some(challenge) = &req.challenge {
+        if !nonce_binds(&req.signed_data, challenge) {
+            st.reason = Some("the signed intent was not made for this challenge".into());
+            return st;
+        }
     }
 
     let client = Client::new();
@@ -162,30 +205,27 @@ fn check(req: Request) -> Statement {
     st
 }
 
+fn refused(reason: String) -> Statement {
+    Statement {
+        result: "refused",
+        signer_id: None,
+        token_id: String::new(),
+        threshold: String::new(),
+        challenge: None,
+        auth_status: None,
+        balances_status: None,
+        reason: Some(reason),
+    }
+}
+
 fn main() {
     let mut input = String::new();
     let statement = match io::stdin().read_to_string(&mut input) {
         Ok(_) => match serde_json::from_str::<Request>(&input) {
             Ok(req) => check(req),
-            Err(e) => Statement {
-                result: "refused",
-                signer_id: None,
-                token_id: String::new(),
-                threshold: String::new(),
-                auth_status: None,
-                balances_status: None,
-                reason: Some(format!("bad input: {e}")),
-            },
+            Err(e) => refused(format!("bad input: {e}")),
         },
-        Err(e) => Statement {
-            result: "refused",
-            signer_id: None,
-            token_id: String::new(),
-            threshold: String::new(),
-            auth_status: None,
-            balances_status: None,
-            reason: Some(format!("cannot read input: {e}")),
-        },
+        Err(e) => refused(format!("cannot read input: {e}")),
     };
     print!("{}", serde_json::to_string(&statement).unwrap());
     io::stdout().flush().ok();
@@ -194,6 +234,16 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A raw_ed25519-style signed intent whose nonce carries `random`.
+    fn signed_with_random(random: &[u8]) -> Value {
+        let mut n = vec![0u8; NONCE_LEN];
+        n[NONCE_RANDOM].copy_from_slice(random);
+        let payload = serde_json::json!({
+            "signer_id": "abc", "intents": [], "nonce": STANDARD.encode(&n),
+        });
+        serde_json::json!({ "standard": "raw_ed25519", "payload": payload.to_string() })
+    }
 
     #[test]
     fn compares_long_integers() {
@@ -216,5 +266,40 @@ mod tests {
     fn refuses_non_empty_intents() {
         let moving = serde_json::json!({ "payload": "{\"signer_id\":\"abc\",\"intents\":[{\"intent\":\"transfer\"}]}" });
         assert_eq!(signer_id(&moving), None);
+    }
+
+    #[test]
+    fn nonce_must_carry_the_challenge_digest() {
+        let challenge = "jurat:jurat.near:7:0011223344556677";
+        let digest = Sha256::digest(challenge.as_bytes());
+        let bound = signed_with_random(&digest[..7]);
+        assert!(nonce_binds(&bound, challenge));
+        assert!(!nonce_binds(&bound, "jurat:jurat.near:8:0011223344556677"));
+        assert!(!nonce_binds(&signed_with_random(&[0; 7]), challenge));
+    }
+
+    #[test]
+    fn reads_nep413_nonce_from_payload() {
+        let challenge = "jurat:jurat.near:1:ab";
+        let mut n = vec![0u8; NONCE_LEN];
+        n[NONCE_RANDOM].copy_from_slice(&Sha256::digest(challenge.as_bytes())[..7]);
+        let nep = serde_json::json!({ "payload": {
+            "nonce": STANDARD.encode(&n),
+            "message": "{\"signer_id\":\"bob.near\",\"intents\":[]}",
+        } });
+        assert!(nonce_binds(&nep, challenge));
+    }
+
+    #[test]
+    fn a_challenge_run_refuses_an_unbound_intent_before_any_call() {
+        let st = check(Request {
+            signed_data: signed_with_random(&[9; 7]),
+            token_id: "nep141:wrap.near".into(),
+            threshold: "0".into(),
+            challenge: Some("jurat:jurat.near:1:ab".into()),
+        });
+        assert_eq!(st.result, "refused");
+        assert_eq!(st.auth_status, None);
+        assert_eq!(st.challenge.as_deref(), Some("jurat:jurat.near:1:ab"));
     }
 }
