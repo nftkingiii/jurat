@@ -2,7 +2,7 @@ name: enclave
 
 on:
   push:
-    paths: ['enclave/**', 'spike/**', '.github/workflows/enclave.yml']
+    paths: ['enclave/**', 'spike/**', 'Cargo.toml', 'Cargo.lock', '.github/workflows/enclave.yml']
   workflow_dispatch:
 
 jobs:
@@ -24,20 +24,18 @@ jobs:
           version: '50.0.0'
 
       - name: Unit tests
-        working-directory: enclave
         run: cargo test --locked
 
       - name: Build the WASI P2 module
-        working-directory: enclave
         run: |
           cargo build --locked --release --target wasm32-wasip2
-          sha256sum target/wasm32-wasip2/release/jurat-enclave.wasm | tee ../wasm.sha256
+          sha256sum target/wasm32-wasip2/release/jurat-enclave.wasm | tee wasm.sha256
 
       # The module runs outside OutLayer here, against live 1Click mainnet,
       # with throwaway keys that hold nothing.
       - name: Run against 1Click
         run: |
-          WASM=enclave/target/wasm32-wasip2/release/jurat-enclave.wasm
+          WASM=target/wasm32-wasip2/release/jurat-enclave.wasm
           run() { node spike/local/make-request.mjs "$@" | wasmtime run -S http "$WASM"; }
 
           ok=$(run nep141:wrap.near 0);       echo "threshold 0: $ok"
@@ -53,5 +51,5 @@ jobs:
         with:
           name: jurat-enclave-wasm
           path: |
-            enclave/target/wasm32-wasip2/release/jurat-enclave.wasm
+            target/wasm32-wasip2/release/jurat-enclave.wasm
             wasm.sha256

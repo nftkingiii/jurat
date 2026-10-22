@@ -1,0 +1,9 @@
+[workspace]
+members = ["enclave"]
+resolver = "2"
+
+# OutLayer compiles from the repository root, so the release profile lives here.
+[profile.release]
+opt-level = "z"
+lto = true
+strip = true
