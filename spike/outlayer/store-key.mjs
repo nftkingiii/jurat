@@ -1,8 +1,8 @@
-// Stores a NEAR testnet key for the OutLayer spike, outside the repository.
+// Stores a NEAR key for the OutLayer spike, outside the repository.
 //
 // Prompts for the account id and the private key (typed without echo), checks
-// the key is an access key of that account on testnet, and writes
-// ~/.jurat/testnet/<account>.json with owner-only permissions.
+// the key is an access key of that account (testnet for *.testnet, otherwise
+// mainnet), and writes ~/.jurat/<network>/<account>.json with owner-only permissions.
 // Nothing is printed except the account and the public key.
 //
 // Run: node spike/outlayer/store-key.mjs
@@ -14,8 +14,6 @@ import { mkdirSync, writeFileSync, chmodSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { KeyPair } from 'near-api-js';
-
-const RPC = 'https://rpc.testnet.fastnear.com';
 
 function ask(question, { hidden = false } = {}) {
   return new Promise((resolve) => {
@@ -45,8 +43,8 @@ function ask(question, { hidden = false } = {}) {
   });
 }
 
-async function viewAccessKey(accountId, publicKey) {
-  const res = await fetch(RPC, {
+async function viewAccessKey(rpcUrl, accountId, publicKey) {
+  const res = await fetch(rpcUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -65,23 +63,25 @@ async function readPiped() {
 }
 
 const [accountId, secret] = process.stdin.isTTY
-  ? [await ask('Testnet account id (e.g. you.testnet): '), await ask('Private key (ed25519:..., not shown): ', { hidden: true })]
+  ? [await ask('Account id (you.testnet or you.near): '), await ask('Private key (ed25519:..., not shown): ', { hidden: true })]
   : await readPiped();
 if (!/^[a-z0-9._-]+$/.test(accountId)) throw new Error('That does not look like a NEAR account id.');
+const network = accountId.endsWith('.testnet') ? 'testnet' : 'mainnet';
+const rpcUrl = `https://rpc.${network}.fastnear.com`;
 
 let keyPair;
 try { keyPair = KeyPair.fromString(secret); } catch { throw new Error('That is not a valid ed25519:... private key.'); }
 const publicKey = keyPair.getPublicKey().toString();
 
-const check = await viewAccessKey(accountId, publicKey);
+const check = await viewAccessKey(rpcUrl, accountId, publicKey);
 if (!check.result || check.result.error) {
-  throw new Error(`Key ${publicKey} is not an access key of ${accountId} on testnet.`);
+  throw new Error(`Key ${publicKey} is not an access key of ${accountId} on ${network}.`);
 }
 const perm = check.result.permission === 'FullAccess' ? 'FullAccess' : 'FunctionCall';
 
-const dir = join(homedir(), '.jurat', 'testnet');
+const dir = join(homedir(), '.jurat', network);
 mkdirSync(dir, { recursive: true, mode: 0o700 });
 const file = join(dir, `${accountId}.json`);
 writeFileSync(file, JSON.stringify({ account_id: accountId, private_key: secret }), { mode: 0o600 });
 chmodSync(file, 0o600);
-console.log(`Stored ${perm} key ${publicKey} for ${accountId} in ${file}`);
+console.log(`Stored ${perm} ${network} key ${publicKey} for ${accountId} in ${file}`);

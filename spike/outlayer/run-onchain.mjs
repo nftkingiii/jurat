@@ -1,4 +1,5 @@
-// Runs the Jurat enclave inside OutLayer through outlayer.testnet.
+// Runs the Jurat enclave inside OutLayer (outlayer.testnet or outlayer.near,
+// picked from the account name).
 //
 // The request carries an empty intent signed by a throwaway key, so the enclave
 // logs in to live 1Click and reads an empty confidential balance.
@@ -8,8 +9,10 @@
 // the worker checks before it runs anything.
 //
 // Usage:
-//   node spike/outlayer/run-onchain.mjs <account.testnet> <release tag> [threshold] [--stale]
-// The key comes from ~/.jurat/testnet/<account>.json (written by store-key.mjs).
+//   node spike/outlayer/run-onchain.mjs <account> <release tag> [threshold] [--stale] [--mainnet-ok]
+// The key comes from ~/.jurat/<network>/<account>.json (written by store-key.mjs).
+// A mainnet run spends real NEAR, so it needs --mainnet-ok, attaches only the
+// estimated cost, and stops if that is above MAX_MAINNET_DEPOSIT.
 
 import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -18,15 +21,22 @@ import { generateKeyPairSync, createHash } from 'node:crypto';
 import { Account, parseNearAmount, teraToGas } from 'near-api-js';
 import { currentSalt, signEmptyIntent } from '../local/intent.mjs';
 
-const RPC = 'https://rpc.testnet.fastnear.com';
-const OUTLAYER = 'outlayer.testnet';
 const REPO = 'https://github.com/nftkingiii/jurat';
+const MAX_MAINNET_DEPOSIT = parseNearAmount('0.01');
 
 const args = process.argv.slice(2).filter((a) => !a.startsWith('--'));
 const stale = process.argv.includes('--stale');
 const [accountId, tag, threshold = '0'] = args;
 if (!accountId || !/^enclave-v[0-9A-Za-z.+-]+$/.test(tag ?? '')) {
-  console.error('Usage: run-onchain.mjs <account.testnet> <enclave-v... release tag> [threshold] [--stale]');
+  console.error('Usage: run-onchain.mjs <account> <enclave-v... release tag> [threshold] [--stale] [--mainnet-ok]');
+  process.exit(2);
+}
+const NETWORK = accountId.endsWith('.testnet') ? 'testnet' : 'mainnet';
+const RPC = `https://rpc.${NETWORK}.fastnear.com`;
+const OUTLAYER = NETWORK === 'testnet' ? 'outlayer.testnet' : 'outlayer.near';
+const EXPLORER = NETWORK === 'testnet' ? 'https://testnet.nearblocks.io/txns/' : 'https://nearblocks.io/txns/';
+if (NETWORK === 'mainnet' && !process.argv.includes('--mainnet-ok')) {
+  console.error(`${accountId} is a mainnet account; this spends real NEAR. Re-run with --mainnet-ok.`);
   process.exit(2);
 }
 const WASM_URL = `${REPO}/releases/download/${tag}/jurat-enclave.wasm`;
@@ -43,7 +53,7 @@ async function releaseHash() {
 }
 
 const { private_key: secret } = JSON.parse(
-  readFileSync(join(homedir(), '.jurat', 'testnet', `${accountId}.json`), 'utf8'),
+  readFileSync(join(homedir(), '.jurat', NETWORK, `${accountId}.json`), 'utf8'),
 );
 const account = new Account(accountId, RPC, secret);
 
@@ -87,7 +97,12 @@ const limits = { max_instructions: 10_000_000_000, max_memory_mb: 128, max_execu
 const hash = await releaseHash();
 const input = await request();
 const cost = await view('estimate_execution_cost', { resource_limits: limits, input_len: input.length });
-const deposit = (BigInt(cost) * 3n > BigInt(parseNearAmount('0.02'))) ? BigInt(cost) * 3n : BigInt(parseNearAmount('0.02'));
+// Testnet gets headroom; mainnet attaches exactly the estimate, refunded above the actual cost.
+const deposit = NETWORK === 'mainnet' ? BigInt(cost) : BigInt(cost) * 3n;
+if (NETWORK === 'mainnet' && deposit > BigInt(MAX_MAINNET_DEPOSIT)) {
+  throw new Error(`estimated cost ${cost} yocto is above the 0.01 NEAR cap; not sending`);
+}
+const before = await rpc('query', { request_type: 'view_account', finality: 'final', account_id: accountId });
 
 const callArgs = {
   source: { WasmUrl: { url: WASM_URL, hash, build_target: 'wasm32-wasip2' } },
@@ -95,14 +110,14 @@ const callArgs = {
   input_data: input,
   response_format: 'Json',
 };
-console.log(`threshold ${threshold}${stale ? ' (stale intent)' : ''} | ${tag} sha256 ${hash.slice(0, 12)}… | estimated ${cost} yocto, attaching ${deposit} (refund above cost)`);
+console.log(`${NETWORK} ${OUTLAYER} | threshold ${threshold}${stale ? ' (stale intent)' : ''} | ${tag} sha256 ${hash.slice(0, 12)}… | estimated ${cost} yocto, attaching ${deposit} (refund above cost)`);
 
 const sent = await account.callFunctionRaw({
   contractId: OUTLAYER, methodName: 'request_execution', args: callArgs,
   deposit, gas: teraToGas('300'), waitUntil: 'INCLUDED',
 });
 const txHash = sent.transaction?.hash ?? sent.transaction_outcome?.id;
-console.log(`tx ${txHash}\n   https://testnet.nearblocks.io/txns/${txHash}`);
+console.log(`tx ${txHash}\n   ${EXPLORER}${txHash}`);
 
 const outcome = await waitFinal(txHash);
 const status = outcome.status;
@@ -115,3 +130,6 @@ if (status.SuccessValue !== undefined) {
 for (const r of outcome.receipts_outcome) {
   for (const log of r.outcome.logs) console.log('log', log.slice(0, 400));
 }
+const after = await rpc('query', { request_type: 'view_account', finality: 'final', account_id: accountId });
+const spent = BigInt(before.result.amount) - BigInt(after.result.amount);
+console.log(`balance change ${Number(spent) / 1e24} NEAR`);
