@@ -114,7 +114,10 @@ console.log(`${NETWORK} ${OUTLAYER} | threshold ${threshold}${stale ? ' (stale i
 
 const sent = await account.callFunctionRaw({
   contractId: OUTLAYER, methodName: 'request_execution', args: callArgs,
-  deposit, gas: teraToGas('300'), waitUntil: 'INCLUDED',
+  // NEAR reserves prepaid gas up front at a pessimistic price (~0.001 NEAR per
+  // Tgas), so 300 Tgas would lock ~0.3 NEAR. OutLayer needs 50 Tgas for its
+  // callback plus a few for the call; unused gas is refunded.
+  deposit, gas: teraToGas(NETWORK === 'mainnet' ? '80' : '300'), waitUntil: 'INCLUDED',
 });
 const txHash = sent.transaction?.hash ?? sent.transaction_outcome?.id;
 console.log(`tx ${txHash}\n   ${EXPLORER}${txHash}`);
