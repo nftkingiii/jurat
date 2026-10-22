@@ -1,8 +1,8 @@
-name: enclave
+name: checks
 
 on:
   push:
-    paths: ['enclave/**', 'spike/**', 'Cargo.toml', 'Cargo.lock', '.github/workflows/enclave.yml']
+    paths: ['enclave/**', 'contract/**', 'spike/**', 'Cargo.toml', 'Cargo.lock', '.github/workflows/enclave.yml']
   workflow_dispatch:
 
 jobs:
@@ -41,11 +41,18 @@ jobs:
           ok=$(run nep141:wrap.near 0);       echo "threshold 0: $ok"
           low=$(run nep141:wrap.near 1);      echo "threshold 1: $low"
           stale=$(run nep141:wrap.near 0 --stale); echo "stale intent: $stale"
+          C=jurat:jurat.near:0:0707070707070707
+          bound=$(run nep141:wrap.near 0 --challenge=$C); echo "bound to challenge: $bound"
+          other=$(run nep141:wrap.near 0 --challenge=$C --sign-for=jurat:jurat.near:1:0707070707070707); echo "signed for another: $other"
 
           test "$(jq -r .result <<<"$ok")" = confirmed
           test "$(jq -r .result <<<"$low")" = not_confirmed
           test "$(jq -r .result <<<"$stale")" = refused
           test "$(jq -r .auth_status <<<"$stale")" = 401
+          test "$(jq -r .result <<<"$bound")" = confirmed
+          test "$(jq -r .challenge <<<"$bound")" = "$C"
+          test "$(jq -r .result <<<"$other")" = refused
+          test "$(jq -r .auth_status <<<"$other")" = null
 
       - uses: actions/upload-artifact@v4
         with:
@@ -53,3 +60,14 @@ jobs:
           path: |
             target/wasm32-wasip2/release/jurat-enclave.wasm
             wasm.sha256
+
+  contract:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: contract
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Statement contract unit tests
+        run: cargo test --locked
