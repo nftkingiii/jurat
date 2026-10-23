@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "jurat-dist",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "5179", "--directory", "app/dist", "--bind", "127.0.0.1"],
+      "port": 5179
+    }
+  ]
+}
