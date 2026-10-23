@@ -28,6 +28,7 @@ const release = (tag: string, hash: string, challenges: boolean): EnclaveRelease
 
 /** Releases a checker accepts, newest first. The first is what Prove runs. */
 export const ENCLAVES: EnclaveRelease[] = [
+  release('enclave-v0.2.0', 'f59eb06d922dc2cd0e1dbd30f8ec0886855f9d9ffda88f3d28d8159f42bd83a7', true),
   release('enclave-v0.1.0-spike.1', '93b9aab6398021efda26aa56d64ce803c1917cffd90e06ae253f00d118efa3b4', false),
 ];
 
