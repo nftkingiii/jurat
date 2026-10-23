@@ -19,3 +19,7 @@ dist/
 target/
 *.wasm
 !vendor/**/*.wasm
+
+# App
+app/node_modules/
+app/dist/
