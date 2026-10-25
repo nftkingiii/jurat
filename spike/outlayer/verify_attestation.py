@@ -27,6 +27,8 @@ import dcap_qvl
 
 API = "https://api.outlayer.ai/attestations/"
 RPC = "https://rpc.mainnet.fastnear.com"
+# Transactions older than about two days are only on archival nodes.
+ARCHIVAL_RPC = "https://archival-rpc.mainnet.fastnear.com"
 REGISTER = "worker.outlayer.near"
 
 
@@ -37,8 +39,8 @@ def get_json(url, body=None):
         return json.load(resp)
 
 
-def rpc(method, params):
-    out = get_json(RPC, {"jsonrpc": "2.0", "id": "jurat", "method": method, "params": params})
+def rpc(method, params, url=RPC):
+    out = get_json(url, {"jsonrpc": "2.0", "id": "jurat", "method": method, "params": params})
     if "error" in out:
         raise RuntimeError(f"{method}: {out['error']}")
     return out["result"]
@@ -77,7 +79,7 @@ def task_hash(a):
 def tx_input_output(a):
     tx = rpc("EXPERIMENTAL_tx_status", {
         "tx_hash": a["transaction_hash"], "sender_account_id": a["caller_account_id"], "wait_until": "FINAL",
-    })
+    }, ARCHIVAL_RPC)
     input_data = None
     for r in tx["receipts_outcome"]:
         for log in r["outcome"]["logs"]:

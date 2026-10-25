@@ -23,3 +23,6 @@ target/
 # App
 app/node_modules/
 app/dist/
+
+# Launch material, kept local
+media/
