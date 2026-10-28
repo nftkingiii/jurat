@@ -106,14 +106,22 @@ export async function checkProof(txHash: string, sender: string, expected?: stri
   const proof: Proof = { txHash, sender, verdict: null, holder: null, challenge: null, blockTimeMs: null, output: null, checks, ok: false };
 
   const tx = await txStatus(txHash, sender);
-  add('tx', 'Transaction went to OutLayer', tx.transaction.receiver_id === OUTLAYER, tx.transaction.receiver_id);
+  // Direct runs go to OutLayer; contract runs go to a contract that calls it (the event below proves the call).
+  add('tx', 'Transaction reached OutLayer', tx.transaction.receiver_id === OUTLAYER || tx.receipts_outcome.some((r: any) => r.outcome.executor_id === OUTLAYER), tx.transaction.receiver_id);
   const ev = requestEvent(tx);
   if (!ev) {
     add('request', 'OutLayer accepted the request', false, 'no execution_requested event');
     return proof;
   }
 
-  const outputBytes = tx.status.SuccessValue != null ? fromBase64(tx.status.SuccessValue) : new Uint8Array();
+  // The enclave's output is what OutLayer's settlement receipt returns: the
+  // transaction's result for a direct call, but not when a contract (the
+  // statement contract) calls OutLayer and returns its own value.
+  let outputBytes: Uint8Array = new Uint8Array();
+  for (const r of tx.receipts_outcome) {
+    const value = r.outcome.status?.SuccessValue;
+    if (r.outcome.executor_id === OUTLAYER && value) outputBytes = fromBase64(value);
+  }
   let output: any = null;
   try {
     output = JSON.parse(new TextDecoder().decode(outputBytes));

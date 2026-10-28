@@ -87,7 +87,15 @@ def tx_input_output(a):
                 event = json.loads(log[len("EVENT_JSON:"):])
                 if event.get("event") == "execution_requested":
                     input_data = json.loads(event["data"][0]["request_data"])["input_data"]
-    output = base64.b64decode(tx["status"]["SuccessValue"])
+    # The enclave's output is what OutLayer's settlement receipt returns. For a
+    # direct call that is also the transaction's result; when a contract calls
+    # OutLayer (the statement contract), the transaction returns the contract's
+    # own value instead, so read the last outlayer.near receipt with a value.
+    output = b""
+    for r in tx["receipts_outcome"]:
+        value = r["outcome"]["status"].get("SuccessValue")
+        if r["outcome"]["executor_id"] == "outlayer.near" and value:
+            output = base64.b64decode(value)
     return input_data, output
 
 

@@ -90,13 +90,14 @@ cargo test --locked                       # enclave, from the repo root
 | Requests are bound into the signature and echoed by the enclave | [enclave-v0.2.0](https://github.com/nftkingiii/jurat/releases/tag/enclave-v0.2.0), run under wasmtime against live NEAR Intents (step 4) |
 | The released wasm matches the source | built by [CI](.github/workflows/release.yml) with rust 1.85.0 from the tagged commit, paths remapped out of the binary; sha256 in the release |
 | The statement contract behaves as specified | 17 unit tests with mocked OutLayer callbacks (`contract/src/tests.rs`) |
+| A challenge answered through the contract, inside OutLayer, with enclave-v0.2.0 | challenge 0 opened in [H2fG3Qbz](https://nearblocks.io/txns/H2fG3QbzsgsXNeAx84VkwDgbwf8EV1E8J5F8Znrs4vJ6), proved in [6FP7Pqoj](https://nearblocks.io/txns/6FP7PqojHNGzLmJDm3KfAmBiohjAEC2y1hwsKpefQypM): statement 0, `not_confirmed` (throwaway holder, threshold 1 yoctoNEAR of wNEAR), read back with `get_challenge`; attestation [1184714](https://api.outlayer.ai/attestations/1184714) passes every check |
 | The statement contract is live on mainnet | `juratapp.near`, deployed and initialised in [EKojmXxZ](https://nearblocks.io/txns/EKojmXxZDhxmqHUkHeVGBXiezJxdY3CYcH2BsFKGndBJ); its code hash `7AEdAAvC…ExYEw` is the base58 of the built wasm's sha256 `5b83c0bd…612c`; `get_config` returns owner `juratapp.near`, `outlayer.near` and enclave-v0.2.0 |
 
 ## Not yet done
 
 - A proof of a real, funded confidential balance. Every run so far used empty throwaway accounts.
-- A run of `enclave-v0.2.0` inside OutLayer, and a full Prove flow with a real wallet.
-- The app does not use the statement contract yet: its requests are self-describing text and expiry is checked by the verifier's page. The contract is live (below) but no challenge has been answered through it.
+- A full Prove flow with a real wallet.
+- The app does not use the statement contract yet: its requests are self-describing text and expiry is checked by the verifier's page, and its Check tab does not read contract challenges.
 - Rebuilding the release byte-for-byte outside GitHub Actions.
 - Hosting the app.
 
