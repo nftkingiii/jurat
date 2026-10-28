@@ -17,9 +17,10 @@ const RPC = 'https://rpc.mainnet.fastnear.com';
 const MAX_LOCK = BigInt(parseNearAmount('1.8'));
 const GAS_BUDGET = BigInt(parseNearAmount('0.01'));
 const BYTE_COST = 10n ** 19n; // 0.00001 NEAR per byte, protocol 86
+// The challenge-binding release; the contract only accepts outputs that echo its challenge.
 const ENCLAVE = {
-  url: 'https://github.com/nftkingiii/jurat/releases/download/enclave-v0.1.0-spike.1/jurat-enclave.wasm',
-  hash: '93b9aab6398021efda26aa56d64ce803c1917cffd90e06ae253f00d118efa3b4',
+  url: 'https://github.com/nftkingiii/jurat/releases/download/enclave-v0.2.0/jurat-enclave.wasm',
+  hash: 'f59eb06d922dc2cd0e1dbd30f8ec0886855f9d9ffda88f3d28d8159f42bd83a7',
 };
 
 const [accountId, wasmPath, expected] = process.argv.slice(2).filter((a) => !a.startsWith('--'));
