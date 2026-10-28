@@ -4,6 +4,7 @@ import { parseChallenge, type Challenge } from '../lib/challenge';
 import { ENCLAVES, INTENTS } from '../lib/config';
 import { keyRegistered, signedData, signRequest, type SignRequest } from '../lib/intent';
 import { enclaveInput, estimateCost, proveTransaction } from '../lib/outlayer';
+import { CONTRACTS, getChallenge, proveTx, toChallenge } from '../lib/contract';
 import { fromUnits, loadTokens, type Token } from '../lib/tokens';
 import { connect, currentWallet, type Connected } from '../lib/wallet';
 
@@ -16,20 +17,34 @@ interface Signed {
   at: number;
 }
 
-function readChallenge(): { challenge: Challenge | null; error: string } {
-  const text = new URLSearchParams(location.search).get('c');
-  if (!text) return { challenge: null, error: '' };
+/** Where the request comes from: self-describing link text, or a challenge on a Jurat contract. */
+type Source = { kind: 'link' } | { kind: 'contract'; contract: string; id: string };
+
+function readLink(): { source: Source | null; challenge: Challenge | null; error: string } {
+  const q = new URLSearchParams(location.search);
+  const contract = q.get('contract');
+  const id = q.get('id');
+  if (contract && id) {
+    if (!CONTRACTS[contract] || !/^\d{1,20}$/.test(id)) return { source: null, challenge: null, error: 'This link names an unknown Jurat contract.' };
+    return { source: { kind: 'contract', contract, id }, challenge: null, error: '' };
+  }
+  const text = q.get('c');
+  if (!text) return { source: null, challenge: null, error: '' };
   try {
-    return { challenge: parseChallenge(text), error: '' };
+    return { source: { kind: 'link' }, challenge: parseChallenge(text), error: '' };
   } catch {
-    return { challenge: null, error: 'This link does not contain a valid Jurat request.' };
+    return { source: null, challenge: null, error: 'This link does not contain a valid Jurat request.' };
   }
 }
 
 const declined = (e: unknown) => /reject|denied|cancel|closed/i.test(String((e as Error)?.message ?? e));
 
 export function Prove() {
-  const [{ challenge, error: linkError }] = useState(readChallenge);
+  const [link] = useState(readLink);
+  const [challenge, setChallenge] = useState<Challenge | null>(link.challenge);
+  const [linkError, setLinkError] = useState(link.error);
+  const [loading, setLoading] = useState(link.source?.kind === 'contract');
+  const source = link.source;
   const [pasted, setPasted] = useState('');
   const [tokens, setTokens] = useState<Token[] | null>(null);
   const [who, setWho] = useState<Connected | null>(null);
@@ -38,6 +53,15 @@ export function Prove() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [cost, setCost] = useState<bigint | null>(null);
+
+  useEffect(() => {
+    if (source?.kind === 'contract') {
+      getChallenge(source.contract, source.id)
+        .then((c) => (c ? setChallenge(toChallenge(c)) : setLinkError('There is no such challenge on the Jurat contract.')))
+        .catch((e) => setLinkError(`Could not read the challenge from ${source.contract}: ${String(e.message ?? e)}`))
+        .finally(() => setLoading(false));
+    }
+  }, [source]);
 
   useEffect(() => {
     loadTokens().then(setTokens).catch(() => setTokens([]));
@@ -106,11 +130,25 @@ export function Prove() {
       }
       const deposit = cost ?? (await estimateCost(input.length));
       setStep('sending');
-      const outcome: any = await who!.wallet.signAndSendTransaction(proveTransaction(input, deposit, who!.accountId, release));
+      // Through the contract it records a public statement and enforces expiry on chain.
+      const tx =
+        source?.kind === 'contract'
+          ? proveTx(source.contract, source.id, signed!.data, deposit)
+          : proveTransaction(input, deposit, who!.accountId, release);
+      const outcome: any = await who!.wallet.signAndSendTransaction(tx);
       const hash = outcome?.transaction?.hash ?? outcome?.transaction_outcome?.id;
       if (!hash) throw new Error('The wallet sent the transaction but did not return its hash.');
       go({ tx: hash, from: who!.accountId, c: challenge!.text });
     }).finally(() => setStep((s) => (s === 'sending' ? 'send' : s)));
+
+  if (loading) {
+    return (
+      <section>
+        <h1>Reading the request…</h1>
+        <p className="lede">Loading the challenge from the Jurat contract on NEAR.</p>
+      </section>
+    );
+  }
 
   if (!challenge) {
     return (
@@ -125,8 +163,11 @@ export function Prove() {
             try {
               const url = new URL(pasted.trim());
               const c = url.searchParams.get('c');
-              if (!c) throw new Error('no request');
-              location.assign(`${location.pathname}?c=${encodeURIComponent(c)}`);
+              const contract = url.searchParams.get('contract');
+              const id = url.searchParams.get('id');
+              if (contract && id) location.assign(`${location.pathname}?contract=${encodeURIComponent(contract)}&id=${encodeURIComponent(id)}`);
+              else if (c) location.assign(`${location.pathname}?c=${encodeURIComponent(c)}`);
+              else throw new Error('no request');
             } catch {
               setError('Paste the full request link.');
             }
@@ -225,8 +266,9 @@ export function Prove() {
             {(step === 'send' || step === 'sending') && (
               <>
                 <span className="small muted">
-                  Pays OutLayer {cost != null ? `${(Number(cost) / 1e24).toFixed(4)} NEAR` : 'its fee'}; the unused part is
-                  refunded. Your wallet reserves about 0.08 NEAR of gas for a moment.
+                  Pays OutLayer {cost != null ? `${(Number(cost) / 1e24).toFixed(4)} NEAR` : 'its fee'}
+                  {source?.kind === 'contract' ? ' plus 0.01 NEAR for the public statement' : ''}; the unused part is
+                  refunded. Your wallet reserves about {source?.kind === 'contract' ? '0.1' : '0.08'} NEAR of gas for a moment.
                 </span>
                 <div className="actions">
                   <button className="btn seal" onClick={doSend} disabled={busy || expired}>

@@ -16,4 +16,20 @@ describe('checkProof against mainnet', () => {
     expect(p.verdict).toBe('confirmed');
     expect(p.ok).toBe(false);
   }, 60_000);
+
+  // Statement 0 on juratapp.near: a contract challenge answered inside OutLayer
+  // with enclave-v0.2.0 by a throwaway holder. A valid proof whose verdict is
+  // not_confirmed.
+  it('verifies statement 0 on juratapp.near as a valid proof', async () => {
+    const p = await checkProof('6FP7PqojHNGzLmJDm3KfAmBiohjAEC2y1hwsKpefQypM', 'juratapp.near');
+    const failed = p.checks.filter((c) => !c.ok).map((c) => `${c.id}: ${c.detail}`);
+    expect(failed).toEqual([]);
+    for (const id of ['contract-code', 'contract-call', 'statement', 'challenge-echo', 'in-time', 'binding', 'output']) {
+      expect(p.checks.some((c) => c.id === id && c.ok), id).toBe(true);
+    }
+    expect(p.contract).toBe('juratapp.near');
+    expect(p.verdict).toBe('not_confirmed');
+    expect(p.challenge?.text).toBe('jurat:juratapp.near:0:9621de585f01fbb0');
+    expect(p.ok).toBe(true);
+  }, 90_000);
 });

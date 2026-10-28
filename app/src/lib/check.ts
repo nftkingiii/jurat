@@ -3,10 +3,11 @@
 // worker builds on worker.outlayer.near. Nothing here trusts Jurat's servers
 // (there are none) or OutLayer's dashboard.
 
-import { getCollateralAndVerify } from '@phala/dcap-qvl';
+import { getCollateralAndVerify, Quote, utils, verify } from '@phala/dcap-qvl';
 import { fromBase64, hex, sha256 } from './bytes';
 import { ARCHIVAL_RPC, ENCLAVES, OUTLAYER, OUTLAYER_API, WORKER_REGISTER } from './config';
 import { parseChallenge, type Challenge } from './challenge';
+import { CONTRACTS, codeHash, getChallenge, parseContractText, toChallenge, type ContractChallenge } from './contract';
 import { rpc, txStatus, view } from './rpc';
 
 export interface Check {
@@ -22,6 +23,8 @@ export interface Proof {
   verdict: string | null;
   holder: string | null;
   challenge: Challenge | null;
+  /** The Jurat contract the proof went through, when it did. */
+  contract: string | null;
   blockTimeMs: number | null;
   output: Record<string, unknown> | null;
   checks: Check[];
@@ -78,6 +81,31 @@ export async function taskHash(a: Attestation): Promise<string> {
   return hex(await sha256(all));
 }
 
+/**
+ * Verify a TDX quote with Intel's DCAP rules. The collateral (Intel-signed CRLs,
+ * TCB info and QE identity) comes first from OutLayer's archive, as of the
+ * moment the quote was made, because that endpoint allows browser requests;
+ * Phala's PCCS is the fallback. Where it came from changes nothing about the
+ * trust: dcap-qvl checks Intel's signatures on it either way.
+ */
+async function verifyQuote(quote: Uint8Array, atSecs: number) {
+  try {
+    const q: any = Quote.parse(quote);
+    const auth = q.authData.intoV3 ? q.authData.intoV3() : q.authData;
+    const u: any = utils;
+    const cert = u.extractCerts(Buffer.from(auth.certificationData.body))[0];
+    const fmspc = Buffer.from(u.getFmspc(u.getIntelExtension(cert))).toString('hex').toUpperCase();
+    const res = await fetch(`${OUTLAYER_API}/public/collateral?fmspc=${fmspc}&at=${atSecs}`);
+    const archived = res.ok ? await res.json() : null;
+    if (archived?.covers_requested_time && typeof archived.collateral === 'string') {
+      return { verified: verify(quote, JSON.parse(archived.collateral), atSecs), source: `collateral as of ${new Date(atSecs * 1000).toISOString()}` };
+    }
+  } catch {
+    // fall through to the PCCS
+  }
+  return { verified: await getCollateralAndVerify(quote), source: 'current collateral from Phala PCCS' };
+}
+
 function requestEvent(tx: any): { requestId: number; input: string; wasmHash: string | null } | null {
   for (const r of tx.receipts_outcome) {
     for (const log of r.outcome.logs as string[]) {
@@ -103,11 +131,12 @@ async function blockTimeMs(blockHash: string): Promise<number> {
 export async function checkProof(txHash: string, sender: string, expected?: string): Promise<Proof> {
   const checks: Check[] = [];
   const add = (id: string, label: string, ok: boolean, detail = '') => checks.push({ id, label, ok, detail });
-  const proof: Proof = { txHash, sender, verdict: null, holder: null, challenge: null, blockTimeMs: null, output: null, checks, ok: false };
+  const proof: Proof = { txHash, sender, verdict: null, holder: null, challenge: null, contract: null, blockTimeMs: null, output: null, checks, ok: false };
 
   const tx = await txStatus(txHash, sender);
   // Direct runs go to OutLayer; contract runs go to a contract that calls it (the event below proves the call).
   add('tx', 'Transaction reached OutLayer', tx.transaction.receiver_id === OUTLAYER || tx.receipts_outcome.some((r: any) => r.outcome.executor_id === OUTLAYER), tx.transaction.receiver_id);
+  proof.contract = tx.transaction.receiver_id === OUTLAYER ? null : tx.transaction.receiver_id;
   const ev = requestEvent(tx);
   if (!ev) {
     add('request', 'OutLayer accepted the request', false, 'no execution_requested event');
@@ -136,13 +165,31 @@ export async function checkProof(txHash: string, sender: string, expected?: stri
   try {
     input = JSON.parse(ev.input);
   } catch {}
+  // A request is either self-describing text (jurat:v1:…) or a challenge on a
+  // Jurat contract (jurat:<contract>:<id>:<nonce>), whose terms live on chain.
+  const text: string = input?.challenge ?? '';
   let challenge: Challenge | null = null;
-  try {
-    challenge = parseChallenge(input?.challenge ?? '');
-  } catch {}
+  let onChain: ContractChallenge | null = null;
+  const ref = parseContractText(text);
+  if (ref) {
+    const known = CONTRACTS[ref.contract];
+    const deployed = known ? await codeHash(ref.contract).catch(() => '') : '';
+    add('contract-code', 'Request lives on a published Jurat contract', !!known && deployed === known, `${ref.contract} (${deployed || 'unknown code'})`);
+    add('contract-call', 'The proof went through that contract', tx.transaction.receiver_id === ref.contract, tx.transaction.receiver_id);
+    onChain = known ? await getChallenge(ref.contract, ref.id).catch(() => null) : null;
+    if (onChain && onChain.challenge === text) challenge = toChallenge(onChain);
+  } else {
+    try {
+      challenge = parseChallenge(text);
+    } catch {}
+  }
   proof.challenge = challenge;
-  add('challenge-format', 'Carries a Jurat challenge', !!challenge && !!release?.challenges, challenge?.text ?? 'none');
-  if (expected !== undefined) add('challenge-match', 'Answers your challenge', challenge?.text === expected, '');
+  add('challenge-format', 'Carries a Jurat request', !!challenge && !!release?.challenges, challenge?.text ?? (text || 'none'));
+  if (expected !== undefined) add('challenge-match', 'Answers your request', challenge?.text === expected, '');
+  if (onChain && output) {
+    const s = onChain.statements.find((x) => x.verdict === output.result && x.holder === output.signer_id && x.wasm_hash === ev.wasmHash);
+    add('statement', 'The contract recorded this statement', !!s, s ? `block ${s.block_height}` : `${onChain.statements.length} statements, none match`);
+  }
   if (challenge && output) {
     add(
       'challenge-echo',
@@ -173,10 +220,10 @@ export async function checkProof(txHash: string, sender: string, expected?: stri
 
   const quote = fromBase64(a.tdx_quote);
   try {
-    const verified = await getCollateralAndVerify(quote);
+    const { verified, source } = await verifyQuote(quote, a.timestamp);
     // OutLayer's workers produce TDX 1.0 quotes; anything else fails the checks below.
     const td = verified.report.asTd10();
-    add('intel', "Intel's signature on the enclave quote", true, `TCB ${verified.status}`);
+    add('intel', "Intel's signature on the enclave quote", true, `TCB ${verified.status}, ${source}`);
     add('quote-type', 'Quote is a TDX 1.0 report', !!td, verified.report.type);
     if (td) {
       add('debug', 'Enclave debug mode is off', (td.tdAttributes[0] & 1) === 0, '');

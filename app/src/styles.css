@@ -125,7 +125,7 @@ input[inputmode='decimal'] { font-variant-numeric: tabular-nums; }
   content: ''; position: absolute; inset: 6px; border: 1px solid var(--rule); border-radius: 3px; pointer-events: none;
 }
 .jurat > * { position: relative; }
-.jurat .statement { font: 400 clamp(20px, 3.4vw, 26px)/1.35 var(--serif); margin: 0 0 var(--s5); }
+.jurat .statement { font: 400 clamp(20px, 3.4vw, 26px)/1.35 var(--serif); margin: 0 0 var(--s5); overflow-wrap: anywhere; }
 .jurat dl { display: grid; grid-template-columns: max-content 1fr; gap: var(--s2) var(--s5); margin: 0; }
 .jurat dt { color: var(--muted); font-size: 13px; padding-top: 2px; }
 .jurat dd { margin: 0; min-width: 0; }
@@ -163,3 +163,6 @@ input[inputmode='decimal'] { font-variant-numeric: tabular-nums; }
 .foot a { color: inherit; }
 
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+label.check { display: grid; grid-template-columns: 22px 1fr; gap: var(--s3); align-items: start; font-weight: 500; }
+label.check input { width: 18px; height: 18px; min-height: 0; margin-top: 3px; accent-color: var(--seal); }

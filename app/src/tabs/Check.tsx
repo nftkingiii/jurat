@@ -102,6 +102,7 @@ export function Check() {
             {proof.holder && (<><dt>Holder</dt><dd className="mono">{proof.holder}</dd></>)}
             {c && (<><dt>Requested</dt><dd>at least {amount}, answer before {new Date(c.expiresMs).toLocaleString()}</dd></>)}
             {proof.blockTimeMs && (<><dt>Sworn</dt><dd>{new Date(proof.blockTimeMs).toLocaleString()}</dd></>)}
+            {proof.contract && (<><dt>Recorded on</dt><dd className="mono">{proof.contract}</dd></>)}
             <dt>Transaction</dt>
             <dd>
               <a className="link mono" href={`${EXPLORER_TX}${proof.txHash}`} target="_blank" rel="noreferrer">

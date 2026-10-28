@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { makeChallenge, type Challenge } from '../lib/challenge';
 import { loadTokens, toUnits, type Token } from '../lib/tokens';
+import { createChallengeTx, DEFAULT_CONTRACT, toChallenge, type ContractChallenge } from '../lib/contract';
+import { EXPLORER_TX } from '../lib/config';
+import { connect, currentWallet } from '../lib/wallet';
 
 const EXPIRY = [
   { label: '15 minutes', minutes: 15 },
@@ -15,8 +18,12 @@ export function Request() {
   const [assetId, setAssetId] = useState('');
   const [amount, setAmount] = useState('');
   const [minutes, setMinutes] = useState(60);
-  const [made, setMade] = useState<{ challenge: Challenge; token: Token; amount: string } | null>(null);
+  const [made, setMade] = useState<{ challenge: Challenge; token: Token; amount: string; onChain?: { id: string; tx: string } } | null>(null);
   const [copied, setCopied] = useState(false);
+  // On chain: the contract enforces the expiry and keeps every statement public.
+  const [record, setRecord] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     loadTokens()
@@ -37,7 +44,35 @@ export function Request() {
     }
   }, [amount, token]);
 
-  const link = made ? `${location.origin}${location.pathname}?c=${encodeURIComponent(made.challenge.text)}` : '';
+  const link = !made
+    ? ''
+    : made.onChain
+      ? `${location.origin}${location.pathname}?contract=${DEFAULT_CONTRACT}&id=${made.onChain.id}`
+      : `${location.origin}${location.pathname}?c=${encodeURIComponent(made.challenge.text)}`;
+
+  const submit = async () => {
+    if (!token || !units.value) return;
+    setError('');
+    if (!record) {
+      setMade({ challenge: makeChallenge(token.assetId, units.value, minutes), token, amount: amount.trim() });
+      return;
+    }
+    setBusy(true);
+    try {
+      const who = (await currentWallet()) ?? (await connect());
+      const outcome: any = await who.wallet.signAndSendTransaction(createChallengeTx(DEFAULT_CONTRACT, token.assetId, units.value, minutes));
+      const value = outcome?.status?.SuccessValue;
+      if (!value) throw new Error('The contract did not return the new challenge.');
+      const c: ContractChallenge = JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(value), (x) => x.charCodeAt(0))));
+      const tx = outcome?.transaction?.hash ?? outcome?.transaction_outcome?.id ?? '';
+      setMade({ challenge: toChallenge(c), token, amount: amount.trim(), onChain: { id: c.id, tx } });
+    } catch (e) {
+      const msg = String((e as Error)?.message ?? e);
+      setError(/reject|denied|cancel|closed/i.test(msg) ? 'You declined in your wallet. Nothing was recorded.' : msg);
+    } finally {
+      setBusy(false);
+    }
+  };
 
   if (made) {
     return (
@@ -51,6 +86,22 @@ export function Request() {
           <dl>
             <dt>Answer before</dt>
             <dd>{new Date(made.challenge.expiresMs).toLocaleString()}</dd>
+            {made.onChain && (
+              <>
+                <dt>Recorded</dt>
+                <dd>
+                  challenge {made.onChain.id} on {DEFAULT_CONTRACT}
+                  {made.onChain.tx && (
+                    <>
+                      {' · '}
+                      <a className="link" href={`${EXPLORER_TX}${made.onChain.tx}`} target="_blank" rel="noreferrer">
+                        transaction
+                      </a>
+                    </>
+                  )}
+                </dd>
+              </>
+            )}
             <dt>Link</dt>
             <dd className="mono">{link}</dd>
           </dl>
@@ -91,8 +142,7 @@ export function Request() {
         className="form"
         onSubmit={(e) => {
           e.preventDefault();
-          if (!token || !units.value) return;
-          setMade({ challenge: makeChallenge(token.assetId, units.value, minutes), token, amount: amount.trim() });
+          submit();
         }}
       >
         <div className="row">
@@ -130,9 +180,20 @@ export function Request() {
             ))}
           </select>
         </label>
+        <label className="check">
+          <input type="checkbox" checked={record} onChange={(e) => setRecord(e.target.checked)} />
+          <span>
+            Record it on NEAR
+            <span className="hint">
+              {' '}The Jurat contract enforces the deadline and keeps the answer public. Your wallet signs once and holds
+              about 0.004 NEAR of storage; the rest is refunded.
+            </span>
+          </span>
+        </label>
+        {error && <p className="notice bad">{error}</p>}
         <div className="actions">
-          <button className="btn" type="submit" disabled={!token || !units.value}>
-            Make request link
+          <button className="btn" type="submit" disabled={!token || !units.value || busy}>
+            {busy ? 'Waiting for your wallet…' : record ? 'Record request and make link' : 'Make request link'}
           </button>
         </div>
       </form>
