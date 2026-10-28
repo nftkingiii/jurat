@@ -90,12 +90,13 @@ cargo test --locked                       # enclave, from the repo root
 | Requests are bound into the signature and echoed by the enclave | [enclave-v0.2.0](https://github.com/nftkingiii/jurat/releases/tag/enclave-v0.2.0), run under wasmtime against live NEAR Intents (step 4) |
 | The released wasm matches the source | built by [CI](.github/workflows/release.yml) with rust 1.85.0 from the tagged commit, paths remapped out of the binary; sha256 in the release |
 | The statement contract behaves as specified | 17 unit tests with mocked OutLayer callbacks (`contract/src/tests.rs`) |
+| The statement contract is live on mainnet | `juratapp.near`, deployed and initialised in [EKojmXxZ](https://nearblocks.io/txns/EKojmXxZDhxmqHUkHeVGBXiezJxdY3CYcH2BsFKGndBJ); its code hash `7AEdAAvC…ExYEw` is the base58 of the built wasm's sha256 `5b83c0bd…612c`; `get_config` returns owner `juratapp.near`, `outlayer.near` and enclave-v0.2.0 |
 
 ## Not yet done
 
 - A proof of a real, funded confidential balance. Every run so far used empty throwaway accounts.
 - A run of `enclave-v0.2.0` inside OutLayer, and a full Prove flow with a real wallet.
-- The statement contract is written and tested but not deployed (it locks about 1.75 NEAR of storage). Without it, requests are self-describing text and expiry is checked by the verifier's page instead of on chain.
+- The app does not use the statement contract yet: its requests are self-describing text and expiry is checked by the verifier's page. The contract is live (below) but no challenge has been answered through it.
 - Rebuilding the release byte-for-byte outside GitHub Actions.
 - Hosting the app.
 
@@ -112,7 +113,7 @@ cargo test --locked                       # enclave, from the repo root
 |---|---|
 | `enclave/` | The WASI P2 program OutLayer runs (Rust, held to rust 1.85) |
 | `app/` | Static web app: Request, Prove, Check (Vite, React, NEAR Connect, `@phala/dcap-qvl`) |
-| `contract/` | Statement contract for an on-chain registry of statements (near-sdk 5.29, not deployed) |
+| `contract/` | Statement contract for an on-chain registry of statements (near-sdk 5.29), live at `juratapp.near` |
 | `spike/local/` | Signing an empty intent, building enclave requests |
 | `spike/outlayer/` | Running the enclave on OutLayer, verifying attestations, deploying the contract |
 | `.github/workflows/` | Tests on push; the enclave release on `enclave-v*` tags |
