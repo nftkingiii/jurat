@@ -11,11 +11,11 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'check', label: 'Check' },
 ];
 
-/** Links carry their own state: ?c= opens Prove, ?tx= opens Check. */
+/** Links carry their own state: ?c= or ?contract=&id= opens Prove, ?tx= opens Check. */
 function tabFromUrl(): Tab {
   const q = new URLSearchParams(location.search);
   if (q.get('tx')) return 'check';
-  if (q.get('c')) return 'prove';
+  if (q.get('c') || (q.get('contract') && q.get('id'))) return 'prove';
   const t = q.get('tab');
   return t === 'prove' || t === 'check' ? t : 'request';
 }
