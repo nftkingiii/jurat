@@ -93,8 +93,8 @@ cargo test --locked                       # enclave, from the repo root
 | The released wasm matches the source | built by [CI](.github/workflows/release.yml) with rust 1.85.0 from the tagged commit, paths remapped out of the binary; sha256 in the release |
 | The statement contract behaves as specified | 17 unit tests with mocked OutLayer callbacks (`contract/src/tests.rs`) |
 | A challenge answered through the contract, inside OutLayer, with enclave-v0.2.0 | challenge 0 opened in [H2fG3Qbz](https://nearblocks.io/txns/H2fG3QbzsgsXNeAx84VkwDgbwf8EV1E8J5F8Znrs4vJ6), proved in [6FP7Pqoj](https://nearblocks.io/txns/6FP7PqojHNGzLmJDm3KfAmBiohjAEC2y1hwsKpefQypM): statement 0, `not_confirmed` (throwaway holder, threshold 1 yoctoNEAR of wNEAR), read back with `get_challenge`; attestation [1184714](https://api.outlayer.ai/attestations/1184714) passes every check |
-| **A real, funded confidential balance proven: Confirmed** | `juratapp.near` deposited USDC into its near.com confidential balance, then recorded challenge 2 (at least 1 USDC, [Ba6hPuFR](https://nearblocks.io/txns/Ba6hPuFRbPjkmMJVFsJ55KJk1mnmczHQQxS6hbem1G8U)) and proved it ([EPSQKGKG](https://nearblocks.io/txns/EPSQKGKGiudsv77ZeehCo75Cz1FUSRX27sjHCi9tLnJw)). The enclave read the private balance and answered `confirmed`; the contract recorded the statement and marked the challenge confirmed. The amount appears nowhere. Attestation [1195207](https://api.outlayer.ai/attestations/1195207) passes every check; all 19 checks pass in the app |
-| A real wallet ran the whole app flow | `juratapp.near` in Meteor: request recorded as challenge 1 ([AGxntGb5](https://nearblocks.io/txns/AGxntGb5ekmBg4BiXash3rY3jbt2Q1D6xbCmgwrEZjvR)), key registered on `intents.near` ([3VRG1t33](https://nearblocks.io/txns/3VRG1t33h7nJheg93A5PV32m7spTDVSDgaB92xxyNu7E)), NEP-413 signature, proof through the contract ([CgiCUiFQ](https://nearblocks.io/txns/CgiCUiFQ1V4r4oAqoRQ2WQM4NunkcD833VXiugXg4VXr)): the enclave logged in to NEAR Intents as `juratapp.near` and the contract recorded `not_confirmed` for at least 1 USDC (the account holds no confidential USDC); attestation [1194952](https://api.outlayer.ai/attestations/1194952) passes every check, and all 19 checks pass in the app |
+| **A real, funded confidential balance proven: Confirmed** | `juratapp.near` deposited USDC into its near.com confidential balance, then recorded challenge 2 (at least 1 USDC, [Ba6hPuFR](https://nearblocks.io/txns/Ba6hPuFRbPjkmMJVFsJ55KJk1mnmczHQQxS6hbem1G8U)) and proved it ([EPSQKGKG](https://nearblocks.io/txns/EPSQKGKGiudsv77ZeehCo75Cz1FUSRX27sjHCi9tLnJw)). The enclave read the private balance and answered `confirmed`; the contract recorded the statement and marked the challenge confirmed. The amount appears nowhere. Attestation [1195207](https://api.outlayer.ai/attestations/1195207) passes every check. In the app, all 18 checks pass when the transaction is opened directly, and all 19 when Prove's link adds the request to compare against |
+| A real wallet ran the whole app flow | `juratapp.near` in Meteor: request recorded as challenge 1 ([AGxntGb5](https://nearblocks.io/txns/AGxntGb5ekmBg4BiXash3rY3jbt2Q1D6xbCmgwrEZjvR)), key registered on `intents.near` ([3VRG1t33](https://nearblocks.io/txns/3VRG1t33h7nJheg93A5PV32m7spTDVSDgaB92xxyNu7E)), NEP-413 signature, proof through the contract ([CgiCUiFQ](https://nearblocks.io/txns/CgiCUiFQ1V4r4oAqoRQ2WQM4NunkcD833VXiugXg4VXr)): the enclave logged in to NEAR Intents as `juratapp.near` and the contract recorded `not_confirmed` for at least 1 USDC (the account holds no confidential USDC); attestation [1194952](https://api.outlayer.ai/attestations/1194952) passes every check, and all 19 checks pass in the app when opened from Prove's link (18 when the transaction is opened directly) |
 | The statement contract is live on mainnet | `juratapp.near`, deployed and initialised in [EKojmXxZ](https://nearblocks.io/txns/EKojmXxZDhxmqHUkHeVGBXiezJxdY3CYcH2BsFKGndBJ); its code hash `7AEdAAvC…ExYEw` is the base58 of the built wasm's sha256 `5b83c0bd…612c`; `get_config` returns owner `juratapp.near`, `outlayer.near` and enclave-v0.2.0 |
 
 ## Not yet done
@@ -120,6 +120,16 @@ cargo test --locked                       # enclave, from the repo root
 | `spike/outlayer/` | Running the enclave on OutLayer, verifying attestations, deploying the contract |
 | `AGENTS.md`, `app/public/llms.txt` | How agents check proofs, read the contract and drive the app |
 | `.github/workflows/` | Tests on push; the enclave release on `enclave-v*` tags |
+
+## Hackathon window and disclosures
+
+- **Built during the hackathon.** NEAR HACKATHON was announced on 2026-10-19, and the first commit in this repository is from 2026-10-22, so no code predates the window. Nothing here is carried over from an earlier project.
+- **Libraries.**
+  - Enclave: `serde`, `serde_json`, `wasi-http-client`, `sha2` and `base64`.
+  - Contract: `near-sdk` and `hex`, built with `cargo-near`.
+  - App: React, Vite, `@hot-labs/near-connect`, `@phala/dcap-qvl` and `vite-plugin-node-polyfills`, tested with Vitest. The command-line checker runs with `tsx`.
+  - Scripts: `near-api-js` and Python `dcap-qvl`.
+- **License.** [MIT](LICENSE).
 
 ## Built on
 
