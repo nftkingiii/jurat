@@ -36,7 +36,7 @@ Never sign for a holder, never move funds, and never put keys in prompts, logs o
 
 ## Driving the web app
 
-The app is static. Its URLs:
+The app is static and live at https://jurat.up.railway.app. `/version.json` names the commit it serves. Its URLs:
 
 - `?tab=request`
 - `?contract=juratapp.near&id=<id>` (Prove)

@@ -6,6 +6,8 @@ A verifier asks "do you hold at least 250 USDC?". The holder answers with their 
 
 Built for [NEAR HACKATHON](https://nearhackathon.com), aimed at the Privacy & Private AI and Real-World Money tracks.
 
+**Live app: https://jurat.up.railway.app** (NEAR mainnet). To see a real proof checked in your browser, open [the Confirmed example](https://jurat.up.railway.app/?tx=EPSQKGKGiudsv77ZeehCo75Cz1FUSRX27sjHCi9tLnJw&from=juratapp.near). The footer and [`/version.json`](https://jurat.up.railway.app/version.json) name the commit being served.
+
 ## The problem
 
 NEAR [Confidential Intents](https://docs.near-intents.org/integration/market-makers/confidential-intents) and [Trezu confidential treasuries](https://github.com/NEAR-DevHub/trezu-docs) keep balances on a private chain, visible only to their owner. That protects people from being watched and targeted. It also takes away the one thing a public balance gave them: proof. Before an OTC trade, a rental, a grant payout or a visa application, the holder can only send a screenshot or say "trust me".
@@ -44,6 +46,8 @@ You should see 8 `PASS` lines per attestation and `ALL PASS`. These are the thre
 
 ### 2. Check a run in the app
 
+Use the [live app](https://jurat.up.railway.app/?tab=check), or run it locally:
+
 ```bash
 cd app
 npm ci
@@ -52,7 +56,7 @@ npm run dev
 
 Or from a terminal, with the same checks: `npm run check -- EPSQKGKGiudsv77ZeehCo75Cz1FUSRX27sjHCi9tLnJw juratapp.near` (add `--json` for the full result; exit code 0 means a valid proof).
 
-Open the local URL, choose **Check**, and enter transaction `9pJpnKExPT7bn6HCrdWG9u3z21d1dFudMRNGdrmHih4J` sent by `juratapp.near`. Every attestation check passes, including Intel's signature verified in the browser, and the page still says **Not a valid Jurat proof**: that spike run predates requests, so it carries none. That refusal is the point; a run only counts when it answers a request.
+Choose **Check**, and enter transaction `9pJpnKExPT7bn6HCrdWG9u3z21d1dFudMRNGdrmHih4J` sent by `juratapp.near`. Every attestation check passes, including Intel's signature verified in the browser, and the page still says **Not a valid Jurat proof**: that spike run predates requests, so it carries none. That refusal is the point; a run only counts when it answers a request.
 
 ### 3. Make a request and answer it
 
@@ -100,7 +104,6 @@ cargo test --locked                       # enclave, from the repo root
 ## Not yet done
 
 - Rebuilding the release byte-for-byte outside GitHub Actions.
-- Hosting the app.
 
 ## What you must trust
 
