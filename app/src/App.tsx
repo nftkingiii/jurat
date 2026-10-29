@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { Request } from './tabs/Request';
 import { Prove } from './tabs/Prove';
 import { Check } from './tabs/Check';
+import { WalletProvider } from './WalletContext';
+import { WalletButton } from './WalletButton';
 
 export type Tab = 'request' | 'prove' | 'check';
 
@@ -37,19 +39,23 @@ export function App() {
   const select = (t: Tab) => go(t === 'request' ? {} : { tab: t });
 
   return (
+    <WalletProvider>
     <div className="shell">
       <header className="top">
         <a className="mark" href="./" onClick={(e) => { e.preventDefault(); select('request'); }}>
           <img src="/seal.svg" alt="" />
           <span>Jurat</span>
         </a>
-        <nav className="tabs" role="tablist" aria-label="Jurat">
-          {TABS.map((t) => (
-            <button key={t.id} role="tab" aria-selected={tab === t.id} onClick={() => select(t.id)}>
-              {t.label}
-            </button>
-          ))}
-        </nav>
+        <div className="top-right">
+          <nav className="tabs" role="tablist" aria-label="Jurat">
+            {TABS.map((t) => (
+              <button key={t.id} role="tab" aria-selected={tab === t.id} data-tab={t.id} onClick={() => select(t.id)}>
+                {t.label}
+              </button>
+            ))}
+          </nav>
+          <WalletButton />
+        </div>
       </header>
 
       <main className="page">
@@ -63,5 +69,6 @@ export function App() {
         <a href="https://github.com/nftkingiii/jurat">Source and how it works</a>
       </footer>
     </div>
+    </WalletProvider>
   );
 }

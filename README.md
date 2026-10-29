@@ -50,6 +50,8 @@ npm ci
 npm run dev
 ```
 
+Or from a terminal, with the same checks: `npm run check -- EPSQKGKGiudsv77ZeehCo75Cz1FUSRX27sjHCi9tLnJw juratapp.near` (add `--json` for the full result; exit code 0 means a valid proof).
+
 Open the local URL, choose **Check**, and enter transaction `9pJpnKExPT7bn6HCrdWG9u3z21d1dFudMRNGdrmHih4J` sent by `juratapp.near`. Every attestation check passes, including Intel's signature verified in the browser, and the page still says **Not a valid Jurat proof**: that spike run predates requests, so it carries none. That refusal is the point; a run only counts when it answers a request.
 
 ### 3. Make a request and answer it
@@ -116,6 +118,7 @@ cargo test --locked                       # enclave, from the repo root
 | `contract/` | Statement contract for an on-chain registry of statements (near-sdk 5.29), live at `juratapp.near` |
 | `spike/local/` | Signing an empty intent, building enclave requests |
 | `spike/outlayer/` | Running the enclave on OutLayer, verifying attestations, deploying the contract |
+| `AGENTS.md`, `app/public/llms.txt` | How agents check proofs, read the contract and drive the app |
 | `.github/workflows/` | Tests on push; the enclave release on `enclave-v*` tags |
 
 ## Built on

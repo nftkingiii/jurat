@@ -1,0 +1,22 @@
+# Jurat
+
+> Confidential proof of funds on NEAR. A holder proves that a NEAR Confidential Intents balance is at least a threshold. An OutLayer TDX enclave reads the balance and outputs only yes or no, and the statement contract juratapp.near records the verdict publicly. Anyone can check it from public data.
+
+## Use this app
+
+- Ask for proof: ?tab=request. Pick a token and an amount. The request is recorded on juratapp.near and gives you a link to send to the holder.
+- Answer a request: ?contract=juratapp.near&id=<id>. The holder connects a wallet and signs an empty intent that moves nothing. The holder registers their key on intents.near once, then runs the proof.
+- Check a proof: ?tx=<hash>&from=<sender>. All checks run in the browser: the NEAR transaction, the contract code hash, OutLayer's attestation, Intel's signature and the task-hash binding.
+- Example of a Confirmed proof: ?tx=EPSQKGKGiudsv77ZeehCo75Cz1FUSRX27sjHCi9tLnJw&from=juratapp.near
+
+## Machine-readable results
+
+- Check result: an element with [data-proof][data-ok][data-verdict][data-holder], and one li[data-check-id][data-ok] per check.
+- A proof counts only when data-ok="true". A verdict with data-ok="false" proves nothing.
+- The same check runs from a terminal: `npm run check -- <tx> <sender> --json` (in app/). Exit code 0 means valid.
+
+## Source
+
+- Repository: https://github.com/nftkingiii/jurat
+- For agents: https://github.com/nftkingiii/jurat/blob/main/AGENTS.md
+- The enclave: https://github.com/nftkingiii/jurat/blob/main/enclave/src/main.rs

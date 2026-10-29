@@ -166,3 +166,31 @@ input[inputmode='decimal'] { font-variant-numeric: tabular-nums; }
 
 label.check { display: grid; grid-template-columns: 22px 1fr; gap: var(--s3); align-items: start; font-weight: 500; }
 label.check input { width: 18px; height: 18px; min-height: 0; margin-top: 3px; accent-color: var(--seal); }
+
+/* Header wallet control */
+.top-right { display: flex; align-items: center; gap: var(--s3); flex-wrap: wrap; }
+.wallet { position: relative; display: flex; flex-direction: column; align-items: flex-end; gap: var(--s1); }
+.wallet-slot { display: inline-block; width: 132px; height: 40px; }
+.small-btn { padding: 10px 14px; min-height: 40px; font-size: 14px; border-radius: 999px; }
+.account-chip { display: inline-flex; align-items: center; gap: var(--s2); font-family: var(--mono); font-size: 13px; }
+.account-chip .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); }
+.wallet-error { color: var(--bad); font-size: 12px; max-width: 220px; text-align: right; }
+.menu {
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: 10; min-width: 240px;
+  background: var(--paper-raised); border: 1px solid var(--rule-strong); border-radius: var(--radius);
+  box-shadow: 0 12px 32px -16px rgba(0, 0, 0, 0.35); padding: var(--s2); display: grid; gap: 2px;
+}
+.menu-head { display: grid; gap: 2px; padding: var(--s2) var(--s3) var(--s3); border-bottom: 1px solid var(--rule); margin-bottom: var(--s1); word-break: break-all; }
+.menu button, .menu a {
+  font: 500 14px/1.2 var(--sans); color: var(--ink); background: none; border: 0; text-align: left; text-decoration: none;
+  padding: 10px var(--s3); border-radius: 4px; cursor: pointer; min-height: 40px;
+}
+.menu button:hover, .menu a:hover, .menu button:focus-visible, .menu a:focus-visible { background: var(--seal-soft); outline: none; }
+.menu .danger { color: var(--bad); }
+/* Phones: the wallet sits beside the mark, the tabs take the full row below. */
+@media (max-width: 560px) {
+  .top-right { display: contents; }
+  .top .wallet { order: 1; }
+  .top .tabs { order: 2; flex-basis: 100%; }
+  .top .tabs button { flex: 1; }
+}

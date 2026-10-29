@@ -6,9 +6,10 @@ import { keyRegistered, signedData, signRequest, type SignRequest } from '../lib
 import { enclaveInput, estimateCost, proveTransaction } from '../lib/outlayer';
 import { CONTRACTS, getChallenge, proveTx, toChallenge } from '../lib/contract';
 import { fromUnits, loadTokens, type Token } from '../lib/tokens';
-import { connect, currentWallet, type Connected } from '../lib/wallet';
+import { declined, useWallet } from '../WalletContext';
+import { NEEDS, nearText } from '../lib/account';
 
-type Step = 'connect' | 'sign' | 'register' | 'send' | 'sending';
+type Step = 'sign' | 'register' | 'send' | 'sending';
 
 interface Signed {
   req: SignRequest;
@@ -37,8 +38,6 @@ function readLink(): { source: Source | null; challenge: Challenge | null; error
   }
 }
 
-const declined = (e: unknown) => /reject|denied|cancel|closed/i.test(String((e as Error)?.message ?? e));
-
 export function Prove() {
   const [link] = useState(readLink);
   const [challenge, setChallenge] = useState<Challenge | null>(link.challenge);
@@ -47,12 +46,19 @@ export function Prove() {
   const source = link.source;
   const [pasted, setPasted] = useState('');
   const [tokens, setTokens] = useState<Token[] | null>(null);
-  const [who, setWho] = useState<Connected | null>(null);
+  const { who, connect, available, refreshBalance } = useWallet();
   const [signed, setSigned] = useState<Signed | null>(null);
-  const [step, setStep] = useState<Step>('connect');
+  const [signedStep, setStep] = useState<Step>('sign');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [cost, setCost] = useState<bigint | null>(null);
+  // A signature belongs to one account: drop it when the wallet disconnects or switches.
+  useEffect(() => {
+    setSigned(null);
+    setStep('sign');
+    setError('');
+  }, [who?.accountId]);
+  const step: Step | 'connect' = who ? signedStep : 'connect';
 
   useEffect(() => {
     if (source?.kind === 'contract') {
@@ -65,12 +71,6 @@ export function Prove() {
 
   useEffect(() => {
     loadTokens().then(setTokens).catch(() => setTokens([]));
-    currentWallet().then((w) => {
-      if (w) {
-        setWho(w);
-        setStep('sign');
-      }
-    });
   }, []);
 
   const token = tokens?.find((t) => t.assetId === challenge?.tokenId);
@@ -93,8 +93,7 @@ export function Prove() {
 
   const doConnect = () =>
     run(async () => {
-      setWho(await connect());
-      setStep('sign');
+      await connect();
     });
 
   const doSign = () =>
@@ -144,8 +143,12 @@ export function Prove() {
       const outcome: any = await who!.wallet.signAndSendTransaction(tx);
       const hash = outcome?.transaction?.hash ?? outcome?.transaction_outcome?.id;
       if (!hash) throw new Error('The wallet sent the transaction but did not return its hash.');
+      refreshBalance();
       go({ tx: hash, from: who!.accountId, c: challenge!.text });
     }).finally(() => setStep((s) => (s === 'sending' ? 'send' : s)));
+
+  const need = source?.kind === 'contract' ? NEEDS.proveContract : NEEDS.proveDirect;
+  const short = who && available != null && available < need;
 
   if (loading) {
     return (
@@ -194,12 +197,12 @@ export function Prove() {
     );
   }
 
-  const order: Step[] = ['connect', 'sign', 'register', 'send'];
+  const order = ['connect', 'sign', 'register', 'send'] as const;
   const at = order.indexOf(step === 'sending' ? 'send' : step);
-  const state = (s: Step) => (order.indexOf(s) < at ? 'done' : order.indexOf(s) === at ? 'now' : '');
+  const state = (s: (typeof order)[number]) => (order.indexOf(s) < at ? 'done' : order.indexOf(s) === at ? 'now' : '');
 
   return (
-    <section>
+    <section data-step={step} data-challenge={challenge.text}>
       <h1>{amount ? `Prove you hold at least ${amount}` : 'Prove your balance'}</h1>
       <p className="lede">
         Your balance is read inside an attested enclave and never leaves it. The requester learns only whether it meets
@@ -219,6 +222,7 @@ export function Prove() {
           <span className="n">1</span>
           <div className="body">
             <span className="title">{who ? `Connected as ${who.accountId}` : 'Connect the NEAR account that holds the funds'}</span>
+            {who && <span className="small muted">Wrong account? Switch it from the account menu at the top.</span>}
             {step === 'connect' && (
               <div className="actions">
                 <button className="btn" onClick={doConnect} disabled={busy || expired}>
@@ -276,6 +280,12 @@ export function Prove() {
                   {source?.kind === 'contract' ? ' plus 0.01 NEAR for the public statement' : ''}; the unused part is
                   refunded. Your wallet reserves about {source?.kind === 'contract' ? '0.1' : '0.08'} NEAR of gas for a moment.
                 </span>
+                {short && (
+                  <span className="field-error">
+                    This account has {nearText(available!)} NEAR free; the run needs about {nearText(need, 2)}. Add NEAR before
+                    running, or the wallet will refuse it.
+                  </span>
+                )}
                 <div className="actions">
                   <button className="btn seal" onClick={doSend} disabled={busy || expired}>
                     {step === 'sending' ? 'Running in the enclave…' : 'Run proof'}

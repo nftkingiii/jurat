@@ -4,6 +4,9 @@ import type { Proof } from '../lib/check';
 import { EXPLORER_TX } from '../lib/config';
 import { fromUnits, loadTokens, type Token } from '../lib/tokens';
 
+/** The first Confirmed proof on mainnet, so anyone can see a full check without making one. */
+const EXAMPLE = { tx: 'EPSQKGKGiudsv77ZeehCo75Cz1FUSRX27sjHCi9tLnJw', from: 'juratapp.near' };
+
 const VERDICT: Record<string, { cls: string; text: string; line: (amount: string) => string }> = {
   confirmed: { cls: 'ok', text: 'Confirmed', line: (a) => `holds at least ${a} in a NEAR confidential account.` },
   not_confirmed: { cls: 'warn', text: 'Not met', line: (a) => `does not hold ${a} in a NEAR confidential account.` },
@@ -19,11 +22,13 @@ export function Check() {
   const [proof, setProof] = useState<Proof | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [copied, setCopied] = useState(false);
 
   const run = async (hash: string, sender: string) => {
     setBusy(true);
     setError('');
     setProof(null);
+    setCopied(false);
     try {
       // Loaded on demand: it carries Intel's quote verifier and its polyfills.
       const { checkProof } = await import('../lib/check');
@@ -74,6 +79,21 @@ export function Check() {
           <button className="btn" type="submit" disabled={busy || !tx.trim() || !from.trim()}>
             {busy ? 'Checking…' : 'Check proof'}
           </button>
+          {!tx && !from && !proof && (
+            <button
+              type="button"
+              className="btn quiet"
+              data-example
+              onClick={() => {
+                setTx(EXAMPLE.tx);
+                setFrom(EXAMPLE.from);
+                go(EXAMPLE);
+                run(EXAMPLE.tx, EXAMPLE.from);
+              }}
+            >
+              Check the mainnet example
+            </button>
+          )}
         </div>
       </form>
 
@@ -87,7 +107,14 @@ export function Check() {
       )}
 
       {proof && (
-        <div className="jurat" style={{ marginTop: 32 }}>
+        <div
+          className="jurat"
+          style={{ marginTop: 32 }}
+          data-proof={proof.txHash}
+          data-ok={String(proof.ok)}
+          data-verdict={proof.ok ? (proof.verdict ?? '') : 'invalid'}
+          data-holder={proof.holder ?? ''}
+        >
           {proof.ok && v ? (
             <span className={`verdict ${v.cls}`}>{v.text}</span>
           ) : (
@@ -112,7 +139,7 @@ export function Check() {
           </dl>
           <ul className="checks">
             {proof.checks.map((ch) => (
-              <li key={ch.id}>
+              <li key={ch.id} data-check-id={ch.id} data-ok={String(ch.ok)}>
                 <span className={ch.ok ? 'mark-ok' : 'mark-bad'} aria-hidden>{ch.ok ? '✓' : '✕'}</span>
                 <span>
                   {ch.label} <span className="sr-only">{ch.ok ? '(passed)' : '(failed)'}</span>
@@ -121,6 +148,17 @@ export function Check() {
               </li>
             ))}
           </ul>
+          <div className="actions" style={{ marginTop: 24 }}>
+            <button
+              className="btn quiet"
+              onClick={async () => {
+                await navigator.clipboard.writeText(location.href);
+                setCopied(true);
+              }}
+            >
+              {copied ? 'Link copied' : 'Copy link to this proof'}
+            </button>
+          </div>
         </div>
       )}
     </section>
