@@ -112,7 +112,13 @@ export function Prove() {
         receiverId: INTENTS,
         actions: [{ type: 'FunctionCall', params: { methodName: 'add_public_key', args: { public_key: signed!.publicKey }, gas: '50000000000000', deposit: '1' } }],
       });
-      if (!(await keyRegistered(who!.accountId, signed!.publicKey))) throw new Error('The key is still not registered on intents.near. Try again in a moment.');
+      // The wallet can return before the change is final; wait for intents.near to show the key.
+      let registered = false;
+      for (let i = 0; i < 15 && !registered; i++) {
+        registered = await keyRegistered(who!.accountId, signed!.publicKey);
+        if (!registered) await new Promise((r) => setTimeout(r, 2000));
+      }
+      if (!registered) throw new Error('The registration was sent but intents.near does not show the key yet. Reload this page in a minute and sign again; do not register twice.');
       // The signed intent is valid for 5 minutes; sign again if it is close to expiring.
       setStep(Date.now() - signed!.at > 4 * 60_000 ? 'sign' : 'send');
     });

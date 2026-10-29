@@ -56,5 +56,6 @@ export function signedData(req: SignRequest, publicKey: string, signatureBase64:
 export async function keyRegistered(accountId: string, publicKey: string): Promise<boolean> {
   if (/^[0-9a-f]{64}$/.test(accountId)) return true; // implicit: the key is the account
   const keys = await view<string[]>(INTENTS, 'public_keys_of', { account_id: accountId });
-  return keys.includes(publicKey);
+  const bare = (k: string) => k.replace(/^ed25519:/, '');
+  return keys.some((k) => bare(k) === bare(publicKey));
 }
