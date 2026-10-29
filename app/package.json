@@ -3,6 +3,9 @@
   "private": true,
   "type": "module",
   "description": "Jurat: prove a NEAR confidential balance meets a threshold without revealing it",
+  "engines": {
+    "node": ">=22.12"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",

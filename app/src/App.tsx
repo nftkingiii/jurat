@@ -67,6 +67,11 @@ export function App() {
       <footer className="foot">
         <span>NEAR mainnet. A proof run costs about 0.002 NEAR, paid by the holder.</span>
         <a href="https://github.com/nftkingiii/jurat">Source and how it works</a>
+        {/^[0-9a-f]{40}$/.test(__COMMIT__) && (
+          <a className="mono" data-commit={__COMMIT__} href={`https://github.com/nftkingiii/jurat/commit/${__COMMIT__}`}>
+            build {__COMMIT__.slice(0, 7)}
+          </a>
+        )}
       </footer>
     </div>
     </WalletProvider>
