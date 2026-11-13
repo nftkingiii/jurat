@@ -132,6 +132,7 @@ cargo test --locked                       # enclave, from the repo root
   - Contract: `near-sdk` and `hex`, built with `cargo-near`.
   - App: React, Vite, `@hot-labs/near-connect`, `@phala/dcap-qvl` and `vite-plugin-node-polyfills`, tested with Vitest. The command-line checker runs with `tsx`.
   - Scripts: `near-api-js` and Python `dcap-qvl`.
+- **Other project.** The same person also submitted [Sluice](https://github.com/nftkingiii/sluice), an independent investment thesis for NEAR, to the Investment Thesis track. The two projects share no code.
 - **License.** [MIT](LICENSE).
 
 ## Built on
