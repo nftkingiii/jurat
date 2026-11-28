@@ -4,13 +4,13 @@
 
 ## Use this app
 
-Live at https://jurat.up.railway.app (NEAR mainnet). Every path below is relative to it. /version.json names the commit being served.
+Retired on 27 November 2026: the hosted app is offline, and the contract on juratapp.near was deleted. The name juratapp.near now belongs to someone else; do not send it requests or funds. Run the app locally from https://github.com/nftkingiii/jurat.
 
 
 - Ask for proof: ?tab=request. Pick a token and an amount. The request is recorded on juratapp.near and gives you a link to send to the holder.
 - Answer a request: ?contract=juratapp.near&id=<id>. The holder connects a wallet and signs an empty intent that moves nothing. The holder registers their key on intents.near once, then runs the proof.
 - Check a proof: ?tx=<hash>&from=<sender>. All checks run in the browser: the NEAR transaction, the contract code hash, OutLayer's attestation, Intel's signature and the task-hash binding.
-- Example of a Confirmed proof: https://jurat.up.railway.app/?tx=EPSQKGKGiudsv77ZeehCo75Cz1FUSRX27sjHCi9tLnJw&from=juratapp.near
+- The Confirmed proof, on NearBlocks: https://nearblocks.io/txns/EPSQKGKGiudsv77ZeehCo75Cz1FUSRX27sjHCi9tLnJw
 
 ## Machine-readable results
 

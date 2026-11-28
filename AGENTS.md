@@ -2,6 +2,8 @@
 
 Jurat proves that a NEAR Confidential Intents balance is at least a threshold without revealing it. A program runs inside an OutLayer TDX enclave, logs in to NEAR Intents with the holder's signed empty intent, reads the balance and outputs only a verdict. The statement contract `juratapp.near` on mainnet records each verdict publicly.
 
+> **Retired on 27 November 2026.** The hosted app is offline, and the statement contract on `juratapp.near` was deleted; its NEAR was returned to its owner. Seconds later, someone else registered the name `juratapp.near`, so that account is no longer Jurat's: don't send it requests or funds. The mainnet evidence in README.md still stands in the chain's history (transactions on NearBlocks, attestations on OutLayer). Re-running `npm run check` on those proofs now fails the contract-code check, because the checker reads the contract's current code, which is gone.
+
 This file is for coding agents working in this repo and for agents that use Jurat. People should start with [README.md](README.md).
 
 ## Check a proof (read-only, free)
@@ -36,7 +38,7 @@ Never sign for a holder, never move funds, and never put keys in prompts, logs o
 
 ## Driving the web app
 
-The app is static and live at https://jurat.up.railway.app. `/version.json` names the commit it serves. Its URLs:
+The app is static and no longer hosted; run it locally (`cd app && npm ci && npm run dev`). Its URLs:
 
 - `?tab=request`
 - `?contract=juratapp.near&id=<id>` (Prove)
